@@ -8,7 +8,7 @@ Three projects related Ultrasound Simulation and Analysis.
 
 ## Explaination
 
-Created a cean signal with a high sampling frequency for good resultion.
+Created a clean signal with a high sampling frequency for good resultion.
 - Clean signal is made up of two sine waves, a 10 Hz dominant component, and a weaker 50 Hz component.
 - Simulates often multiple frequencies pick up in ultrasound.
 
@@ -24,6 +24,40 @@ Use wdenoise() to apply thresholding at ewach wavelet decomposition level. 'Univ
 Note the importance in choosing a decomposition level. In this example, 2 seems to be the ideal level.
 ![Wavelets](https://github.com/user-attachments/assets/687bfeac-b091-4ea4-a676-686bbaa52bbc)
 
+# FIR_IRR.m
+
+## Explaination
+
+Creating a FIR 
+- Order 50; A higher order means smoother frequency response but results in a larger computational load.
+- A cutoff frequency for the FIR is set at 30 Hz and normalized using thesampling frequency to remove frequency components greater than 30 Hz.
+- FIR filter tyle is set to fir1 (Window Method) for simplicity
+
+Creating IIR
+- Order 4; Low compared to FIR, meaning more efficient.
+- Using a butterworth fitlter to avoid ripple in the passband. Smooth frequency response.
+- Cutoff at 30 Hz.
+
+## Results
+
+Note similar results due to the relatively uncomplex signal. Difference mostly lies in computational load in this example.
+![FIRR-IRR](https://github.com/user-attachments/assets/144fe95a-b2ea-4849-b838-94d3b274777a)
+
+___
+
+## Summary of Key Observations
+
+| **Method**              | **Pros**                                                   | **Cons**                                                  |
+|-------------------------|-----------------------------------------------------------|-----------------------------------------------------------|
+| **Wavelet Denoising**   | - Preserves signal structure  <br> - Adaptive filtering <br> - Effective for non-stationary noise | - Requires proper **wavelet selection & thresholding** |
+| **FIR Filtering**       | - Linear phase response (**no distortion**) <br> - Smooth filtering | - Requires a **high filter order**, making it computationally intensive |
+| **IIR Filtering**       | - Lower filter order (**more efficient**) <br> - Better attenuation at high frequencies | - Can introduce **phase distortion** |
+
+For image processing, biosignals, and audio processing use FIR filter. Especially important for Real-time digital signal processing and RADAR.They are more stable as they dont use feedback.
+
+For contorl systems use IIR. The lower computational load makes them ideal for embedded systems. Good for low-latency filtering. Can be unstable (unbounded signal/oscillating outputs) due to feedback loops and can introduce phase distrotion making them less ideal for imaging.
+
+___
 
 # Ultrasound.m
 
