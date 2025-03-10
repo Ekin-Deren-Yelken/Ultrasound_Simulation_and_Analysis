@@ -1,16 +1,33 @@
 # Ultrasound_Simulation_and_Analysis
-Three projects in teh simulation and analysis of python
 
-Ultrasound Simulation and Analysis
-Projects:
-
-1. Write a simulation of ultrasound wave propagation using finite element analysis (FEA).
-2. Implement an algorithm to calculate Doppler shift for blood flow measurements.
-3. Develop a software tool to visualize ultrasound transducer array patterns.
-Ideal Language: Python (for simulation and visualization), MATLAB (for signal modeling), C++ (for performance optimization)
+Three projects related Ultrasound Simulation and Analysis.
 
 
-# Doppler Shift Calculation for Blood Flow Measurements
+
+# Wavelet.m
+
+## Explaination
+
+Created a cean signal with a high sampling frequency for good resultion.
+- Clean signal is made up of two sine waves, a 10 Hz dominant component, and a weaker 50 Hz component.
+- Simulates often multiple frequencies pick up in ultrasound.
+
+Adding Gaussian Noise for simplicity. More types of noise could include cable hum at (60 Hz).
+
+This code uses Daubechies wavelet which is wellp-suited for biomedical signals and smooth oscilations. 
+- Decomposition levels need to be set by balancing detail retentions vs noise remova. More noise can be removed with a higher value but with greater distortion.
+
+Use wdenoise() to apply thresholding at ewach wavelet decomposition level. 'UniversalThreshold' adapts the threshold level based on noise statistics.
+
+## Results
+
+Note the importance in choosing a decomposition level. In this example, 2 seems to be the ideal level.
+![Wavelets](https://github.com/user-attachments/assets/687bfeac-b091-4ea4-a676-686bbaa52bbc)
+
+
+# Ultrasound.m
+
+## Doppler Shift Calculation for Blood Flow Measurements
 
 ## Overview
 This project focuses on developing an algorithm to calculate the Doppler shift in ultrasound signals based on interactions with moving blood particles, enabling blood flow velocity estimation.
