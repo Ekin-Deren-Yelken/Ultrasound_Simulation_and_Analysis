@@ -5,6 +5,34 @@ Three projects related Ultrasound Simulation and Analysis.
 # Ultrasound.m
 
 ## Overview
+Imagine you're standing by a road and listening to a car as it drives past you it goes EEEEooowwww.
+- As the car **approaches**, the sound of the engine **gets higher-pitched** (higher frequency).
+- As the car **moves away**, the sound **drops in pitch** (lower frequency).
+
+This is called the **Doppler Effect**, and it’s exactly how **Doppler ultrasound** works!
+
+Now, instead of a car, imagine tiny red blood cells moving inside a blood vessel. The blood cells are like cars on a highway and the ultrasound is like a speedgun.
+- An **ultrasound machine sends sound waves** into the body.
+- These waves **bounce off moving blood cells** and return with a **shifted frequency** based on blood speed.
+- By analyzing **how the frequency changes over time**, we can estimate **how fast the blood is flowing**—just like hearing a car change pitch as it passes by!
+
+### How This Project Works
+
+1. **I simulate an ultrasound machine.**  
+   - Generate a signal that **mimics real ultrasound waves** reflecting off moving blood.
+
+2. **I introduce real-world problems (noise).**  
+   - In real life, ultrasound signals get **distorted** by noise from the body, electronics, and the environment.
+   - Add these noise sources to make our simulation **realistic**.
+
+3. **I try to "clean" the signal to recover useful information.**  
+   - Use different **filtering techniques** to remove noise.
+
+4. **I extract blood velocity.**  
+   - Instead of **listening** to frequency changes, we **mathematically analyze phase shifts** to measure how blood speed changes over time.
+
+
+
 Doppler ultrasound is a critical tool in medical imaging used to measure blood flow velocity based on frequency shifts in received echoes. This code attempts to explore some of the 
 
 ### Data
