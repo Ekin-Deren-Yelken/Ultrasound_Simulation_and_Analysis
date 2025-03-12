@@ -4,8 +4,6 @@ Three projects related Ultrasound Simulation and Analysis.
 
 # Ultrasound.m
 
-## Doppler Shift Calculation for Blood Flow Measurements
-
 ## Overview
 Doppler ultrasound is a critical tool in medical imaging used to measure blood flow velocity based on frequency shifts in received echoes. This code attempts to explore some of the 
 
