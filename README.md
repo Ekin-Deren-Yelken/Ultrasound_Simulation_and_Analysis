@@ -408,6 +408,26 @@ Using a coefficient correlation function between the reconstruction, noisy, and 
 Correlation Coefficient (Reconstructed vs. Theory): 0.81249
 Correlation Coefficient (Noise vs. Theory): 0.50668
 
+For Error,
+Metrics:
+Mean Absolute Error (MAE):
+   Noise vs. Theory: 1.004174
+   Reconstructed vs. Theory: 0.236423
+
+MAE decreased by ~76.5%, showing a significant improvement in signal accuracy.
+   
+Root Mean Square Error (RMSE):
+   Noise vs. Theory: 1.210512
+   Reconstructed vs. Theory: 0.431067
+
+RMSE reduced by ~64.4%, meaning the reconstructed signal closely follows the theoretical model
+   
+Signal-to-Noise Ratio (SNR) (dB):
+   Noise: -4.67 dB
+   Reconstructed: 4.30 dB
+
+SNR improved by 8.97 dB, confirming that the signal became significantly clearer and more distinguishable from noise.
+
 Clearly, The reconstruction is successful, increasing the correlation by over 50%, however, it is quite low overall and would likely not be good enough for medical use. For the purposes of learning and that I have no clinical or technical expertise (yet) on this subject matter I think this is good enough as there is a very clear visual correlation as seen in the last image.
 
 ## What I learned
