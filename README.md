@@ -408,6 +408,8 @@ Using a coefficient correlation function between the reconstruction, noisy, and 
 Correlation Coefficient (Reconstructed vs. Theory): 0.81249
 Correlation Coefficient (Noise vs. Theory): 0.50668
 
+Clearly, The reconstruction is successful, increasing the correlation by over 50%, however, it is quite low overall and would likely not be good enough for medical use. For the purposes of learning and that I have no clinical or technical expertise (yet) on this subject matter I think this is good enough as there is a very clear visual correlation as seen in the last image.
+
 For Error,
 Metrics:
 Mean Absolute Error (MAE):
@@ -428,7 +430,14 @@ Signal-to-Noise Ratio (SNR) (dB):
 
 SNR improved by 8.97 dB, confirming that the signal became significantly clearer and more distinguishable from noise.
 
-Clearly, The reconstruction is successful, increasing the correlation by over 50%, however, it is quite low overall and would likely not be good enough for medical use. For the purposes of learning and that I have no clinical or technical expertise (yet) on this subject matter I think this is good enough as there is a very clear visual correlation as seen in the last image.
+## CWT vs Hilbert
+
+Comparing CWT and Hilbert, the results are almost identical for most of the spectrum.
+![csw-hilbert](https://github.com/user-attachments/assets/fd128416-bad7-498c-9205-c371a41694b8)
+
+![diff_cwt-hilbert](https://github.com/user-attachments/assets/ef9e15a9-9266-4b3c-a6b1-c23e6b1ae85f)
+
+Hilbert Transform is prefered due to the superior efficiency.
 
 ## What I learned
 This stuff is really hard, very dependant on good data. A lot of design decisions on filtering and windowing, etc. need to be made. But it is very powerful, using pretty simple tools I made somethign pretty cool. Despite having perfect starting conditions, I still lost information in the process so I can't imagine how amazing the real life stuff has to be.
