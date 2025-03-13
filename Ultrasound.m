@@ -1,215 +1,388 @@
-% Clear Workspace and Load Data
 clear; clc; close all;
+disp("running FINAL");
+%% Global Variables
+f_sample = 100e3; % 250 kHz Sampling Rate
+f_o = 2e6; % 2 MHz Carrier frequencyue
+pulse_duration = 10; % 10 second pulse duration
+theta = deg2rad(60); % Ultrasound device Angle
+c_sound = 1540; % [m/s] speed of sound in tissue
 
-%% Parameters
-f_sample = 1e6;  % Sampling frequency (1 MHz)
-f_transmit = 500e3;  % Frequency of transmitted ultrasound wave (500 kHz)
-v = 0.5;    % Blood flow velocity (m/s)
-c = 1540;   % Speed of sound in tissue (m/s)
-theta = deg2rad(45);  % Angle in radians
-duration = 1e-2; % Signal duration (10 ms)
-time = linspace(0, duration, f_sample * duration);
+% Healthy Patient
+healthy_PSV = 1; % [m/s] peak systolic velocity
+healthy_EDV = 0.3;
 
-%% Generate Original Doppler Signal
-v_pulsatile = v + 0.2 * sin(2 * pi * (75/60) * time);  % Simulated heartbeat pulsations
-f_doppler = (2 * f_transmit * v_pulsatile .* cos(theta)) / c;  % Doppler shift
-f_received = f_transmit + f_doppler;
-received_signal = sin(2 * pi * (f_received .* time));  % Original Doppler signal (no noise)
+file = 'heart_blood_flow_velocity_theta60.csv'; % 'heart_blood_flow_velocity_correct.csv';%'hbv.csv';%
+data = readtable(file);
+time = data{:,1};
+doppler_shift = data{:,2};
+blood_velocity_GT = data{:,3};
+N = length(doppler_shift);
 
-%% Add Noise (Realistic Simulation)
-noise_level = 0.3; % Gaussian noise
-gaussian_noise = noise_level * randn(size(received_signal));
+%% Generate the Received Doppler Ultrasound Signal
+phi = 2 * pi * cumsum(doppler_shift) / f_sample; % Compute phase shift by integrating f_doppler
+received_signal = cos(2 * pi * doppler_shift .* time + phi); % Modulated signal
 
-% Powerline Noise (50 Hz)
-line_freq = 50;  
-A = 0.4;  
-line_noise = A * sin(2 * pi * line_freq * time) +  + 0.5*sin(2*pi*50*time);
-
-% Motion Artifact Noise (0.5 Hz slow variations)
-motion_artifact = A * sin(2 * pi * 0.5 * time);
-
-% Harmonic Distortion
-harmonic_amplitude = 0.1;
-harmonic_noise = harmonic_amplitude * (sin(2 * pi * 2 * f_transmit * time) + ...
-                                       sin(2 * pi * 3 * f_transmit * time));
-
-% Add all noise components
-received_signal_noisy = received_signal + gaussian_noise + line_noise + motion_artifact + harmonic_noise;
-
-% Normalize noisy signal
-received_signal_noisy = ( received_signal_noisy / max(abs(received_signal_noisy)) ); % - mean(received_signal_noisy);
+%% Simulate Noise 
+% Parameters
+A_clutter = 1.5;  % Clutter amplitude
+f_clutter = 0.5; % Clutter frequency
+A_elec = 0.3;  % Power line noise amplitude
+f_elec = 60;   % Power line frequency
+sigma = 0.15;   % Thermal noise standard deviation
+speckle_factor = 0.4; % Speckle noise intensity
 
 
-%% Plot Original vs. Noisy Signal
+% Clutter Tissue Noisetruncate = 
+s_clutter = A_clutter * cos(2 * pi * f_clutter * time); % Low-frequency clutter
+noisy_signal = received_signal + s_clutter;
+
+% Electric Noise
+line_noise = A_elec * sin(2 * pi * f_elec * time);
+noisy_signal = noisy_signal + line_noise;
+
+% Thermal Noise
+thermal_noise = sigma * randn(size(time)); % White Gaussian noise
+noisy_signal = noisy_signal + thermal_noise;
+
+% Speckle Noise
+speckle_noise = 1 + speckle_factor * randn(size(time)); % Multiplicative noise
+noisy_signal = noisy_signal .* speckle_noise;
+
+% Plot Signals (Time Domain)
+start_trunk = 10e3;
+truncate = 15e3; % for clarity
+
 figure;
 subplot(2,1,1);
-plot(time, received_signal, 'k');
-title('Original Doppler Signal');
+plot(time(start_trunk:truncate), received_signal(start_trunk:truncate), 'k');
+title('Original Doppler Signal (Truncated for Clarity)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 subplot(2,1,2);
-plot(time, received_signal_noisy, 'r');
-title('Noisy Doppler Signal');
+plot(time(start_trunk:truncate), noisy_signal(start_trunk:truncate), 'r');
+title('Noisy Doppler Signal (Truncated for Clarity)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 sgtitle('Original vs. Noisy Signal');
 
-%% Wavelet Denoising (Improved)
-waveletName = 'db4';  
-level = 7;  
+%% Compute Two-Sided FFT of Received Signal
+Y = fft(noisy_signal); % Compute FFT
+Y_mag = abs(Y) / N; % Normalize by N
+freq_axis = (-f_sample/2 : f_sample/N : f_sample/2 - f_sample/N); 
+Y_mag_shifted = fftshift(Y_mag); % Shift FFT to center it at 0 Hz
 
-% Perform wavelet decomposition
-[coeffs, levels] = wavedec(received_signal_noisy, level, waveletName);
+%% Peak Detection in Two-Sided FFT
 
-threshold = median(abs(coeffs)) / 0.6745;  
-coeffs = wthresh(coeffs, 's', threshold);  % Apply soft thresholding
-received_signal_denoised = waverec(coeffs, levels, waveletName);  % Reconstruct
+function [filtered_freqs, filtered_pks] = detectProminentPeaks(Y_mag_shifted, freq_axis, prominence, neighborhood_threshold)
+    % Peak Detection with Neighborhood Filtering
+    % Inputs:
+    %   Y_mag_shifted - Magnitude spectrum (two-sided FFT)
+    %   freq_axis - Frequency vector corresponding to the FFT
+    %   prominence - Minimum prominence for peak detection
+    %   neighborhood_threshold - Frequency window for merging peaks (Hz)
+    % Outputs:
+    %   filtered_freqs - Prominent peak frequencies (Hz)
+    %   filtered_pks - Corresponding magnitudes of the peaks
 
+    % Find peaks in the magnitude spectrum
+    [pks, locs] = findpeaks(Y_mag_shifted, 'MinPeakProminence', prominence); 
+    prominent_freqs = freq_axis(locs); % Map peak indices to actual frequencies
 
-%% FIR Bandpass Filter (Redesigned)
-% Instead of a low-pass filter, use a **bandpass filter** to preserve Doppler shifts
-filter_order = 60;  % FIR filter order
-nyquist_freq = f_sample / 2;
+    % Sort peaks by frequency
+    [sorted_freqs, sort_idx] = sort(prominent_freqs);
+    sorted_pks = pks(sort_idx);
 
-% Ensure bandpass filter cutoff frequencies are within the valid range (0 < freq < 1)
-bandpass_low = max(1e3, f_transmit - 20e3) / nyquist_freq;  % Ensure positive
-bandpass_high = min(nyquist_freq - 1e3, f_transmit + 20e3) / nyquist_freq;  %
+    % Initialize filtered peak lists
+    filtered_freqs = [];
+    filtered_pks = [];
 
-% Design FIR Bandpass Filter
-fir_coeffs = fir1(filter_order, [bandpass_low bandpass_high], 'bandpass');
+    i = 1;
+    while i <= length(sorted_freqs)
+        % Find all peaks within the ±neighborhood_threshold Hz range
+        in_range_idx = find(abs(sorted_freqs - sorted_freqs(i)) <= neighborhood_threshold);
 
-% Apply FIR filtering
-filtered_signal = filter(fir_coeffs, 1, received_signal_denoised);
+        % Get the strongest peak in this group
+        [max_peak, max_idx] = max(sorted_pks(in_range_idx));
+        filtered_freqs = [filtered_freqs; sorted_freqs(in_range_idx(max_idx))]; %#ok<AGROW>
+        filtered_pks = [filtered_pks; max_peak]; %#ok<AGROW>
 
-%% Frequency Analysis using FFT
-L = length(received_signal_noisy);  % Use actual signal length
-freq_axis = linspace(0, f_sample, L);  % Frequency axis from 0 to f_sample
+        % Skip to the next non-overlapping peak
+        i = in_range_idx(end) + 1;
+    end
+end
 
-fft_original = abs(fft(received_signal));  % FFT of original signal
-fft_noisy = abs(fft(received_signal_noisy));  % FFT before denoising
-fft_denoised = abs(fft(received_signal_denoised));  % FFT after wavelet denoising
-fft_filtered = abs(fft(filtered_signal));  % FFT after FIR filtering
+[filtered_freqs_before, filtered_pks_before] = detectProminentPeaks(Y_mag_shifted, freq_axis, 0.1, 5);
 
-% Plot FFTs
+% Plot Two-Sided FFT with Filtered Peaks
 figure;
+plot(freq_axis, 20*log10(Y_mag_shifted), 'k', 'LineWidth', 1.5); hold on;
+scatter(filtered_freqs_before, 20*log10(filtered_pks_before), 'ro', 'DisplayName', 'Filtered Peaks');
+title('Two-Sided FFT with Peak Detection');
+xlabel('Frequency (Hz)');
+ylabel('Magnitude (dB)');
+legend();
+grid on;
 
-subplot(4,1,1);
-plot(freq_axis, abs(fft_original), 'k');
-title('FFT of Original Signal');
-xlabel('Frequency (Hz)'); ylabel('Magnitude'); grid on;
+%% High-Pass Filter to Remove Clutter
+cutoff_freq = 50;  % Set cutoff at 50 Hz (can adjust to 100 Hz if needed)
+filter_order = 4;  % Higher order = sharper cutoff
+[b, a] = butter(filter_order, cutoff_freq / (f_sample/2), 'high');
+filtered_signal = filtfilt(b, a, noisy_signal);
 
-subplot(4,1,2);
-plot(freq_axis, abs(fft_noisy), 'r');
-title('FFT of Noisy Signal');
-xlabel('Frequency (Hz)'); ylabel('Magnitude'); grid on;
+wall_filter_result = filtered_signal*1;
 
-subplot(4,1,3);
-plot(freq_axis, abs(fft_denoised), 'b');
-title('FFT After Wavelet Denoising');
-xlabel('Frequency (Hz)'); ylabel('Magnitude'); grid on;
+%% Notch Filter to Remove 60 Hz Power Line Noise 
+notch_freq = 60;  % Target frequency (Hz)
+notch_bandwidth = 1;  % Bandwidth of the notch filter (adjust if needed)
 
-subplot(4,1,4);
-plot(freq_axis, abs(fft_filtered), 'g');
-title('FFT After FIR Bandpass Filtering');
-xlabel('Frequency (Hz)'); ylabel('Magnitude'); grid on;
+% Compute the lower and upper cutoff frequencies for the notch
+low_cutoff = notch_freq - notch_bandwidth/2;
+high_cutoff = notch_freq + notch_bandwidth/2;
 
-sgtitle('FFT Analysis: Original vs. Noisy vs. Denoised vs. Filtered');
+% Normalize to Nyquist frequency
+low_cutoff_norm = low_cutoff / (f_sample / 2);
+high_cutoff_norm = high_cutoff / (f_sample / 2);
 
-%% Spectrogram to visualize frequency shifts
-figure;
-spectrogram(filtered_signal, 256, 200, 512, f_sample, 'yaxis');
-title('Spectrogram of Filtered Doppler Signal');
-xlabel('Time (s)'); ylabel('Frequency (Hz)');
-colorbar;
+% Design a second-order Butterworth band-stop filter
+[b_notch, a_notch] = butter(2, [low_cutoff_norm, high_cutoff_norm], 'stop');
 
-%% SNR Comparison
-snr_before = snr(received_signal, received_signal_noisy - received_signal);
-snr_after = snr(received_signal, filtered_signal - received_signal);
-fprintf('SNR Before Denoising: %.2f dB\n', snr_before);
-fprintf('SNR After Denoising: %.2f dB\n', snr_after);
+% Apply Notch Filter to the High-Pass Filtered Signal
+notch_filtered_signal = filtfilt(b_notch, a_notch, filtered_signal);
+notch_filter_results = notch_filtered_signal*1;
 
-%% Plot Comparison: Noisy vs. Wavelet Denoised vs. FIR Filtered
+%% Reconstruction via Continuous Wavelet Transform (CWT)
+% Hilbert Transform Reconstruction with Constant Amplitude
+% Assumes: notch_filtered_signal, f_sample, and time are already defined.
+
+signal = notch_filtered_signal;
+fs = f_sample;
+
+% --- Wavelet Denoising ---
+wname = 'db4';
+level = floor(log2(length(signal)) - 1);
+denoised_wavelet = wdenoise(signal, level, 'DenoisingMethod', "UniversalThreshold");
+denoised_wavelet = denoised_wavelet - mean(denoised_wavelet);
+% Optionally, if additional smoothing is desired, you can use sgolayfilt:
+denoised_signal = sgolayfilt(denoised_wavelet, 3, 21);
+
+% --- Hilbert Transform ---
+analytic_signal = hilbert(denoised_signal);
+inst_phase = unwrap(angle(analytic_signal));
+% Ensure the phase is a column vector (for element-wise operations)
+inst_phase = inst_phase(:);
+
+% --- Reconstruction with Constant Amplitude ---
+% Instead of using the variable amplitude, we force it to 1.
+reconstructed_signal = cos(inst_phase);
+
+% --- Plot the Results ---
 figure;
 subplot(3,1,1);
-plot(time, received_signal_noisy, 'r');
-title('Noisy Signal');
+plot(time(start_trunk:truncate), denoised_signal(start_trunk:truncate));
+title('Denoised Signal (Hilbert)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 subplot(3,1,2);
-plot(time, received_signal_denoised, 'b');
-title('Wavelet Denoised Signal');
-xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+plot(time, inst_phase);
+title('Instantaneous Phase (Hilbert)');
+xlabel('Time (s)'); ylabel('Phase (radians)'); grid on;
 
 subplot(3,1,3);
-plot(time, filtered_signal, 'g');
-title('Final FIR Filtered Signal');
+plot(time(start_trunk:truncate), reconstructed_signal(start_trunk:truncate));
+title('Reconstructed Signal with Constant Amplitude (Hilbert)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
-sgtitle('Comparison of Noisy vs. Denoised vs. FIR Filtered Signal');
 
-%% Correlation Analysis
-corr_noisy = corr(received_signal', received_signal_noisy');  % Original vs Noisy
-corr_denoised = corr(received_signal', received_signal_denoised');  % Original vs Wavelet Denoised
-corr_filtered = corr(received_signal', filtered_signal');  % Original vs FIR Filtered
-
-% Display Correlation Results
-fprintf('Correlation (Original vs Noisy): %.4f\n', corr_noisy);
-fprintf('Correlation (Original vs Wavelet Denoised): %.4f\n', corr_denoised);
-fprintf('Correlation (Original vs FIR Filtered): %.4f\n', corr_filtered);
-
-%% Introduce Phase Distortion
-% Convert noisy signal to frequency domain
-fft_noisy = fft(received_signal_noisy);
-
-% Create a phase shift (example: 90-degree shift at all frequencies)
-phase_shift = exp(1j * pi/2 * (0:length(fft_noisy)-1));
-
-% Apply the phase shift
-fft_noisy_shifted = fft_noisy .* phase_shift;
-
-% Convert back to time domain
-received_signal_phase_distorted = real(ifft(fft_noisy_shifted));
-
-%% Process the Phase-Distorted Signal with Wavelet & FIR Filter
-% Apply Wavelet Denoising
-received_signal_denoised = wdenoise(received_signal_phase_distorted, 3, ...
-    'Wavelet', 'db4', 'DenoisingMethod', 'UniversalThreshold');
-
-% Design a Linear Phase FIR Bandpass Filter
-filter_order = 40;
-bandpass_low = max(1e3, f_transmit - 20e3) / nyquist_freq;  % Ensure positive
-bandpass_high = min(nyquist_freq - 1e3, f_transmit + 20e3) / nyquist_freq;  %
-fir_coeffs = fir1(filter_order, [bandpass_low bandpass_high], 'bandpass');
-
-% Apply FIR filter
-filtered_signal = filtfilt(fir_coeffs, 1, received_signal_denoised);
-
-%% Plot Signals to Compare Phase Distortion & Correction
 figure;
-
-subplot(4,1,1);
-plot(time, received_signal_noisy, 'r');
-title('Noisy Signal (Before Phase Distortion)');
+subplot(2,1,1);
+plot(time(start_trunk:truncate), received_signal(start_trunk:truncate), 'k');
+title('Original Doppler Signal (Truncated for Clarity)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+
+subplot(2,1,2);
+plot(time(start_trunk:truncate), reconstructed_signal(start_trunk:truncate));
+title('Reconstructed Signal with Constant Amplitude (Hilbert)');
+xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+
+%% Filters Step-by-Step
+figure;
+subplot(4,1,1);
+plot(time(start_trunk:truncate), noisy_signal(start_trunk:truncate), 'r'); hold on;
+title('Noisy Doppler Signal (Before Wall Filter)');
+xlabel('Time (s)');
+ylabel('Amplitude');
 
 subplot(4,1,2);
-plot(time, received_signal_phase_distorted, 'm');
-title('Phase-Distorted Signal');
-xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+plot(time(start_trunk:truncate), wall_filter_result(start_trunk:truncate), 'b'); hold on;
+title('Filtered Doppler Signal (Clutter Removed)');
+xlabel('Time (s)');
+ylabel('Amplitude');
 
 subplot(4,1,3);
-plot(time, received_signal_denoised, 'b');
-title('Wavelet Denoised Signal (No Phase Correction)');
-xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+plot(time(start_trunk:truncate), notch_filter_results(start_trunk:truncate), 'b'); hold on;
+title('Filtered Doppler Signal (Electric Noise Removed)');
+xlabel('Time (s)');
+ylabel('Amplitude');
 
 subplot(4,1,4);
-plot(time, filtered_signal, 'g');
-title('Final FIR Filtered Signal (Phase Correction Applied)');
-xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+plot(time(start_trunk:truncate), denoised_signal(start_trunk:truncate), 'b'); hold on;
+title('Filtered Doppler Signal (Thermal Noise Removed)');
+xlabel('Time (s)');
+ylabel('Amplitude');
 
-sgtitle('Comparison of Phase Distortion & Correction');
+%{
+%% Signal Reconstruction Using Peak Frequencies
+% Compute Two-Sided FFT AFTER Wavelet Denoising
+Y_wavelet_filtered = fft(reconstructed_signal);
+Y_mag_wavelet_filtered = abs(Y_wavelet_filtered) / N; % Normalize
+Y_mag_wavelet_filtered_shifted = fftshift(Y_mag_wavelet_filtered);
 
-%% Check Phase Response of FIR Filter
+% Detect Peaks After Wavelet Denoising
+[filtered_freqs_wavelet, filtered_pks_wavelet] = detectProminentPeaks(Y_mag_wavelet_filtered_shifted, freq_axis, 0.1, 5);
+
+% Compute FFT phase spectrum for detected frequencies
+Y_phase_wavelet_filtered = angle(Y_wavelet_filtered); % Extract phase spectrum
+Y_phase_wavelet_filtered_shifted = fftshift(Y_phase_wavelet_filtered); % Shift to match frequency axis
+
+% Find phase corresponding to detected frequencies
+filtered_phases_wavelet = zeros(size(filtered_freqs_wavelet)); % Initialize
+
+for i = 1:length(filtered_freqs_wavelet)
+    % Find the index closest to the detected frequency
+    [~, idx] = min(abs(freq_axis - filtered_freqs_wavelet(i)));
+    filtered_phases_wavelet(i) = Y_phase_wavelet_filtered_shifted(idx); % Store phase
+end
+
+% Step 1: Match Reconstruction Duration
+reconstruction_duration = length(time); % Ensure it matches original time vector
+
+% Ensure Peaks are Computed
+if isempty(filtered_freqs_wavelet) || isempty(filtered_pks_wavelet)
+    error('filtered_freqs_wavelet is empty! Peak detection might have failed.');
+end
+
+% Step 2: Use Peaks Detected After Wavelet Denoising
+reconstruction_freqs = filtered_freqs_wavelet;  % Selected peak frequencies
+reconstruction_amps = filtered_pks_wavelet;  % Corresponding amplitudes
+reconstruction_phases = phi_t;  % Use extracted instantaneous phase φ(t)
+
+% Step 3: Generate Reconstructed Signal
+reconstructed_signal = zeros(size(time)); % Initialize reconstruction
+
+for i = 1:length(reconstruction_freqs)
+    reconstructed_signal = reconstructed_signal + ...
+        reconstruction_amps(i) * cos(2 * pi * reconstruction_freqs(i) * time + reconstruction_phases(i));
+end
+
+% Step 4: Normalize Reconstructed Signal
+reconstructed_signal = reconstructed_signal / max(abs(reconstructed_signal)) * max(abs(denoised_signal));
+
+% Step 5: Store Final Result
+final_reconstruction_result = reconstructed_signal;
+
+% Step 6: Plot Comparison (Original vs. Reconstructed)
 figure;
-freqz(fir_coeffs, 1, 1024, f_sample);
-title('Frequency & Phase Response of FIR Filter');
+subplot(3,1,1);
+plot(time(start_trunk:truncate), denoised_signal(start_trunk:truncate));
+title('Denoised Signal');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+
+subplot(3,1,2);
+plot(time(start_trunk:truncate), final_reconstruction_result(start_trunk:truncate));
+title('Reconstructed Signal (Using Extracted Frequencies & Phase)');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+
+subplot(3,1,3);
+plot(time(start_trunk:truncate), received_signal(start_trunk:truncate), 'k');
+title('Original Signal');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+%}
+%% Compute and Plot Spectrograms
+
+window_length = 256; % Window size for STFT
+overlap = 128; % Overlap between windows
+nfft = 512; % FFT points
+
+figure;
+subplot(1,3,1);
+spectrogram(noisy_signal, window_length, overlap, nfft, f_sample, 'yaxis');
+title('Spectrogram of Noisy Doppler Signal');
+
+subplot(1,3,2);
+spectrogram(denoised_signal, window_length, overlap, nfft, f_sample, 'yaxis');
+title('Spectrogram of Denoised Doppler Signal');
+
+subplot(1,3,3);
+spectrogram(reconstructed_signal, window_length, overlap, nfft, f_sample, 'yaxis');
+title('Spectrogram of Reconstructed Doppler Signal');
+%{%}
+
+%% Compare Reconstructed vs. Original Signal
+
+% Correlation Coefficient
+corr_coeff_signal = corrcoef(received_signal, reconstructed_signal);
+disp(['Correlation Coefficient (Reconstructed vs. Theory): ', num2str(corr_coeff_signal(1,2))]);
+
+corr_coeff_signal_2 = corrcoef(received_signal, noisy_signal);
+disp(['Correlation Coefficient (Noise vs. Theory): ', num2str(corr_coeff_signal_2(1,2))]);
+
+analytic_signal = hilbert(reconstructed_signal);
+inst_phase = unwrap(angle(analytic_signal));
+
+inst_freq = diff(inst_phase)*f_sample/(2*pi);
+inst_freq = [inst_freq; inst_freq(end)]; 
+
+blood_velocity = (inst_freq * c_sound) ./ (2 * f_o * cos(theta));
+
+% Optionally, take the absolute value if you want just the speed:
+blood_velocity = abs(blood_velocity);
+
+% Plot the blood velocity over time
+figure;
+plot(time, blood_velocity./100, 'LineWidth',1.5); hold on;
+title('Blood Velocity vs. Time');
+xlabel('Time (s)');
+ylabel('Velocity (cm/s)');
+grid on;
+
+% Compute Doppler Shift Directly
+doppler_shift_extracted = diff(phi) / (2 * pi * (1 / f_sample));
+time_velocity = time(1:end-1); % Adjust time vector
+
+% Step 3: Convert Doppler Shift to Blood Velocity
+blood_velocity_extracted = (doppler_shift_extracted * c_sound) / (2 * f_o * cos(theta));
+
+% Step 4: Plot Blood Velocity Over Time
+plot(time, blood_velocity_GT-0.3, 'g', 'LineWidth', 1.5);
+plot(time_velocity, blood_velocity_extracted-0.3, 'r', 'LineWidth', 1.5);
+title('Extracted Blood Velocity');
+xlabel('Time (s)');
+ylabel('Velocity (m/s)');
+grid on;
+
+
+%{
+% Find the dominant frequency index for each time step (max magnitude at each time)
+[~, max_idx] = max(abs(cfs), [], 1); % Find max magnitude for each time step
+phi_t = zeros(1, length(time)); % Initialize phase array
+
+for i = 1:length(time)
+    phi_t(i) = cfs_phase(max_idx(i), i); % Extract phase at dominant frequency
+end
+
+% Step 3: Plot the Phase \( \phi(t) \)
+figure;
+plot(time, unwrap(phi_t)); % Unwrap phase for continuity
+xlabel('Time (s)');
+ylabel('Phase \( \phi(t) \) (radians)');
+title('Instantaneous Phase Over Time');
+grid on;
+
+
+%}
