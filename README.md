@@ -96,8 +96,9 @@ $$
 $$
 
 where $\phi$ is the phase shift
+
 $$
-\phi = 2\pi \frac{\sum_{}^{}f_\text{doppler}}{f_\text{sample}} 
+\phi[n] = 2\pi \sum_{k=0}^{n} \frac{f_{\text{doppler}}[k]}{f_{\text{sample}}}
 $$
 
 where $f_\text{sample}$ is the sampling frequency.
@@ -125,6 +126,7 @@ Moving vessel walls, surrounding tissues, and probe motion all generate low-freq
 
 #### Effect on the Doppler Spectrogram and Time-Domain Signal
 If we start with an ideal sinusoidal Doppler signal:
+
 $$
 s(t) = A \sin(2\pi f_{\text{dop}} t)
 $$
@@ -271,18 +273,23 @@ In Doppler ultrasound, the received signal is typically a noisy, modulated versi
 The first step is to reduce the noise present in the received signal using a wavelet-based denoising method. The wavelet transform allows us to decompose the signal into various time-frequency components.
 
 Given a signal $s(t)$ we compute its wavelet decomposition:
+
 $$
 C = W(s(t))
 $$
+
 where $W$ is the wavelet transform operator (for example, using a Daubechies wavelet such as `db4`).
 
-Next, we perform **thresholding** on the coefficients to suppress noise. A common choice is soft thresholding:
+Next, we perform thresholding on the coefficients to suppress noise. A common choice is soft thresholding:
+
 $$
-\tilde{C}(k) = \operatorname{sign}(C(k)) \cdot \max\big(|C(k)| - T,\, 0\big)
+\tilde{C}(k) = \text{sign}(C(k)) \cdot \max\big(|C(k)| - T, 0)
 $$
+
 where $T$ is a threshold, often determined via noise estimation (e.g., using the median absolute deviation).
 
 Finally, we reconstruct the denoised signal using the inverse wavelet transform:
+
 $$
 \tilde{s}(t) = \mathcal{W}^{-1}\{ \tilde{C} \}
 $$
@@ -290,19 +297,23 @@ $$
 #### 2. Instantaneous Phase and Amplitude Extraction
 
 Once we have the denoised signal $\tilde{s}(t)$, we extract its instantaneous characteristics by computing the analytic signal via the Hilbert transform:
+
 $$
-a(t) = \tilde{s}(t) + i\,\mathcal{H}\{\tilde{s}(t)\},
+a(t) = \tilde{s}(t) + i\,\mathcal{H}\{\tilde{s}(t)\}
 $$
+
 where $\mathcal{H}$ denotes the Hilbert transform.
 
 From the analytic signal, we extract the instantaneous amplitude and phase:
+
 $$
-A(t) = |a(t)|, \quad \phi(t) = \operatorname{unwrap}\{\arg(a(t))\}.
+A(t) = |a(t)|, \quad \phi(t) = \text{unwrap}\{\arg(a(t))\}
 $$
 
 The instantaneous frequency is then obtained by differentiating the phase:
+
 $$
-f(t) = \frac{1}{2\pi}\frac{d\phi(t)}{dt}.
+f(t) = \frac{1}{2\pi}\frac{d\phi(t)}{dt}
 $$
 
 #### 3. Signal Reconstruction
@@ -311,41 +322,49 @@ Using the extracted instantaneous phase (and optionally the amplitude), we can r
 
 - **Preserving Amplitude Modulation:**  
   The reconstructed signal is given by
-  $$
-  \tilde{s}_{\text{recon}}(t) = A(t) \cos\big(\phi(t)\big).
-  $$
+  
+$$
+\tilde{s}_{\text{recon}}(t) = A(t) \cos\big(\phi(t)\big)
+$$
 
 - **Constant Amplitude Reconstruction:**  
   To focus solely on the phase (which carries the Doppler frequency information), one may force the amplitude to be constant:
-  $$
-  \tilde{s}_{\text{recon}}(t) = \cos\big(\phi(t)\big).
-  $$
+  
+$$
+\tilde{s}_{\text{recon}}(t) = \cos\big(\phi(t)\big)
+$$
+  
   This guarantees that the signal is confined to the range $[-1,1]$.
 
 #### 4. Doppler Equation and Blood Velocity Estimation
 
 In Doppler ultrasound, the frequency shift $f_{\text{doppler}}$ is related to the blood velocity $V$ by the equation
+
 $$
-f_{\text{doppler}} = \frac{2 f_{\text{transmit}}\, V\, \cos(\theta)}{c},
+f_{\text{doppler}} = \frac{2 f_{\text{transmit}}\, V\, \cos(\theta)}{c}
 $$
+
 where:
 - $f_{\text{transmit}}$ is the transmitted ultrasound frequency,
 - $\theta$ is the insonation angle,
 - $c$ is the speed of sound in tissue.
 
 Solving for $V$, we have:
+
 $$
-V = \frac{f_{\text{doppler}}\, c}{2 f_{\text{transmit}}\, \cos(\theta)}.
+V = \frac{f_{\text{doppler}}\, c}{2 f_{\text{transmit}}\, \cos(\theta)}
 $$
 
 In our reconstruction, the instantaneous frequency $f(t)$ (derived from the phase derivative) acts as $f_{\text{doppler}}$, so we compute:
+
 $$
-V(t) = \frac{f(t)\, c}{2 f_{\text{transmit}}\, \cos(\theta)}.
+V(t) = \frac{f(t)\, c}{2 f_{\text{transmit}}\, \cos(\theta)}
 $$
 
 If you later convert $V(t)$ from meters per second to centimeters per second, recall that
+
 $$
-1\ \text{m/s} = 100\ \text{cm/s}.
+1\ \text{m/s} = 100\ \text{cm/s}
 $$
 
 ---
@@ -368,144 +387,21 @@ $$
   - If preserving amplitude modulation is critical (e.g., if the amplitude carries additional diagnostic information), reconstructing using $A(t)$ is preferred.  
   - If only the Doppler shift (i.e., phase information) is of interest, forcing a constant amplitude simplifies the analysis and avoids amplitude-related artifacts.
 
+### Spectogram
+
+For blood flow, it is expected to see a clear line between 0-5 Hz.
+![spectrogram](https://github.com/user-attachments/assets/db7208f7-572c-4d0e-8fa2-ec1bacad980f)
+
+### Final Blood Velocity Results
+The blood velocity from the data (ground truth) is overlayed on top of the reconstructed blood velocity
+![final result](https://github.com/user-attachments/assets/bbe8f29f-6817-45eb-bce3-0ca264da7668)
 
 
----
+## Validation
 
-This detailed explanation—with equations formatted in LaTeX—provides a comprehensive overview of the signal reconstruction process using wavelet denoising, along with design decisions and alternatives. Adjust parameters (such as the wavelet type, thresholding method, and smoothing window) as needed to suit your particular application.
+Using a coefficient correlation function between the reconstruction, noisy, and theoretical signals we get teh following values where 1 pertains to a higher correlation.
 
+Correlation Coefficient (Reconstructed vs. Theory): 0.81249
+Correlation Coefficient (Noise vs. Theory): 0.50668
 
-
-
-
-
-
-
-
-
-
-
-
-
-
----
-
-## Background
-
-### Doppler Effect in Ultrasound Imaging
-The Doppler effect describes the frequency shift that occurs when ultrasound waves reflect off moving blood cells. The relationship between the transmitted frequency, received frequency, and velocity of moving particles is given by the following equation:
-
-$f_d = \frac{2 f_t v \cos(\theta)}{c}$
-
-Where:  
-- $f_d$ = Doppler shift (Hz)  
-- $f_t$ = Transmitted frequency (Hz)  
-- $v$ = Blood flow velocity (m/s)  
-- $&theta;$ = Angle between ultrasound beam and blood flow direction (degrees)  
-- $c$ = Speed of sound in biological tissue (~1540 m/s)  
-
-### Types of Doppler Ultrasound
-- **Continuous Wave (CW) Doppler:** Constant wave transmission and reception for high-velocity detection.
-- **Pulsed Wave (PW) Doppler:** Short bursts of ultrasound to measure velocity at specific depths.
-
----
-
-### Transmitted Signal
-
-This figure shows the clean transmitted ultrasound signal at $f = 5 kHz$. This is significantly lower than an ultrasound transducer but reduced computational load.
-![ultra1](https://github.com/user-attachments/assets/9f954ee6-d6b0-42be-998f-81a564d84344)
-
-The received signal includes the effects of  Gaussian noise, powerline interference (50 Hz), motion artifacts (0.5 Hz), and harmonic distrotion.
-
-#### Denoising and FFT
-A Wavelet Transform and FIR filter is applied. FIR is chosen for a high order due to stability and no phase distortion which are important for medical signal analysis.
-
-![ultra2](https://github.com/user-attachments/assets/6b08addf-0cae-48f9-9357-7f622780e5a5)
-
-### Spectrogram of Noisy Signal
-A time-frequency representation of the received signal, illustrating how different frequency components evolve over time.
-
-![spectrogram-noisy](https://github.com/user-attachments/assets/c8129ba2-d032-4ba1-8efa-a5101cdc1e0f)
-
-### Filtering
-The received signal after applying notch filtering (to remove 50 Hz powerline noise), high-pass filtering (to remove motion artifacts), and low-pass filtering (to suppress high-frequency noise).
-
-![recieved-filter](https://github.com/user-attachments/assets/e24b0cf1-84e3-439b-990e-de04f0130dad)
-
-### Frequency Spectrum and Spectrogram of Filtered Signal
-FFT analysis of the filtered signal, showing suppression of unwanted noise while retaining the Doppler frequency component.
-
-####Key Observations:
-- The 50 Hz powerline noise and high-frequency components are effectively removed.
-- The Doppler shift peak is the only remaining distinguishable peak.
-- Spectrogram is significantly clearer.
-
-![fft-recieved-after-filter](https://github.com/user-attachments/assets/bcee7f88-a887-4f99-b5c8-ec240c4788f3)
-
-![spectrogram-after-filter](https://github.com/user-attachments/assets/0120abf7-3860-4090-8c10-c8c223868507)
-
-### Denoising Efficacy
-After denoising, the doppler shift frequency is estimated at 2001000 Hz or 2.001 MHz. This error can be attributatble to memory errors in operating with large numbers on computers. Comparing the two signals, we can calculate the signal to noise ration before and after filtering to get a beter idea of how well teh filters worked.
-
-![filtered-compare](https://github.com/user-attachments/assets/3fd5e53d-73b4-4048-98dc-2669c774adc2)
-
-SNR before filtering = 0.28 dB
-SNR after filtering = 2.09 dB
-
-The blood flow is estimated after denoising and tested at different angles:
-![image](https://github.com/user-attachments/assets/0363a12a-900b-4a42-a612-b1dc1b2ea3c8)
-
-# Wavelet.m
-
-## Explaination
-
-Created a clean signal with a high sampling frequency for good resultion.
-- Clean signal is made up of two sine waves, a 10 Hz dominant component, and a weaker 50 Hz component.
-- Simulates often multiple frequencies pick up in ultrasound.
-
-Adding Gaussian Noise for simplicity. More types of noise could include cable hum at (60 Hz).
-
-This code uses Daubechies wavelet which is wellp-suited for biomedical signals and smooth oscilations. 
-- Decomposition levels need to be set by balancing detail retentions vs noise remova. More noise can be removed with a higher value but with greater distortion.
-
-Use wdenoise() to apply thresholding at ewach wavelet decomposition level. 'UniversalThreshold' adapts the threshold level based on noise statistics.
-
-## Results
-
-Note the importance in choosing a decomposition level. In this example, 2 seems to be the ideal level.
-![Wavelets](https://github.com/user-attachments/assets/687bfeac-b091-4ea4-a676-686bbaa52bbc)
-
-# FIR_IRR.m
-
-## Explaination
-
-Creating a FIR 
-- Order 50; A higher order means smoother frequency response but results in a larger computational load.
-- A cutoff frequency for the FIR is set at 30 Hz and normalized using thesampling frequency to remove frequency components greater than 30 Hz.
-- FIR filter tyle is set to fir1 (Window Method) for simplicity
-
-Creating IIR
-- Order 4; Low compared to FIR, meaning more efficient.
-- Using a butterworth fitlter to avoid ripple in the passband. Smooth frequency response.
-- Cutoff at 30 Hz.
-
-## Results
-
-Note similar results due to the relatively uncomplex signal. Difference mostly lies in computational load in this example.
-![FIRR-IRR](https://github.com/user-attachments/assets/144fe95a-b2ea-4849-b838-94d3b274777a)
-
-___
-
-## Summary of Key Observations
-
-| **Method**              | **Pros**                                                   | **Cons**                                                  |
-|-------------------------|-----------------------------------------------------------|-----------------------------------------------------------|
-| **Wavelet Denoising**   | - Preserves signal structure  <br> - Adaptive filtering <br> - Effective for non-stationary noise | - Requires proper **wavelet selection & thresholding** |
-| **FIR Filtering**       | - Linear phase response (**no distortion**) <br> - Smooth filtering | - Requires a **high filter order**, making it computationally intensive |
-| **IIR Filtering**       | - Lower filter order (**more efficient**) <br> - Better attenuation at high frequencies | - Can introduce **phase distortion** |
-
-For image processing, biosignals, and audio processing use FIR filter. Especially important for Real-time digital signal processing and RADAR.They are more stable as they dont use feedback.
-
-For contorl systems use IIR. The lower computational load makes them ideal for embedded systems. Good for low-latency filtering. Can be unstable (unbounded signal/oscillating outputs) due to feedback loops and can introduce phase distrotion making them less ideal for imaging.
-
-___
+Clearly, The reconstruction is successful, increasing the correlation by over 50%, however, it is quite low overall and would likely not be good enough for medical use. For the purposes of learning and that I have no clinical or technical expertise (yet) on this subject matter I think this is good enough as there is a very clear visual correlation as seen in the last image.
