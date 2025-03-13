@@ -167,13 +167,13 @@ denoised_signal = sgolayfilt(denoised_wavelet, 3, 21);
 
 % --- Hilbert Transform ---
 analytic_signal = hilbert(denoised_signal);
-inst_phase = unwrap(angle(analytic_signal));
+inst_phase_hilbert = unwrap(angle(analytic_signal));
 % Ensure the phase is a column vector (for element-wise operations)
-inst_phase = inst_phase(:);
+inst_phase_hilbert = inst_phase_hilbert(:);
 
 % --- Reconstruction with Constant Amplitude ---
 % Instead of using the variable amplitude, we force it to 1.
-reconstructed_signal = cos(inst_phase);
+reconstructed_signal = cos(inst_phase_hilbert);
 
 % --- Plot the Results ---
 figure;
@@ -183,7 +183,7 @@ title('Denoised Signal (Hilbert)');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 subplot(3,1,2);
-plot(time, inst_phase);
+plot(time, inst_phase_hilbert);
 title('Instantaneous Phase (Hilbert)');
 xlabel('Time (s)'); ylabel('Phase (radians)'); grid on;
 
@@ -333,9 +333,9 @@ corr_coeff_signal_2 = corrcoef(received_signal, noisy_signal);
 disp(['Correlation Coefficient (Noise vs. Theory): ', num2str(corr_coeff_signal_2(1,2))]);
 
 analytic_signal = hilbert(reconstructed_signal);
-inst_phase = unwrap(angle(analytic_signal));
+inst_phase_hilbert = unwrap(angle(analytic_signal));
 
-inst_freq = diff(inst_phase)*f_sample/(2*pi);
+inst_freq = diff(inst_phase_hilbert)*f_sample/(2*pi);
 inst_freq = [inst_freq; inst_freq(end)]; 
 
 blood_velocity = (inst_freq * c_sound) ./ (2 * f_o * cos(theta));
@@ -364,6 +364,73 @@ plot(time_velocity, blood_velocity_extracted-0.3, 'r', 'LineWidth', 1.5);
 title('Extracted Blood Velocity');
 xlabel('Time (s)');
 ylabel('Velocity (m/s)');
+grid on;
+
+%% Validation
+theory_signal = received_signal; % Your theoretical reference signal
+
+% Ensure signals have matching length
+min_length = min(length(theory_signal), length(reconstructed_signal));
+theory_resized = theory_signal(1:min_length);
+reconstructed_resized = reconstructed_signal(1:min_length);
+noisy_resized = noisy_signal(1:min_length); % Ensure noisy signal is also matched
+
+% Mean Absolute Error (MAE)
+MAE_recon = mean(abs(reconstructed_resized - theory_resized));
+MAE_noise = mean(abs(noisy_resized - theory_resized));
+
+% Root Mean Square Error (RMSE)
+RMSE_recon = sqrt(mean((reconstructed_resized - theory_resized).^2));
+RMSE_noise = sqrt(mean((noisy_resized - theory_resized).^2));
+
+% Signal-to-Noise Ratio (SNR)
+signal_power = mean(theory_resized.^2);
+noise_power_recon = mean((theory_resized - reconstructed_resized).^2);
+noise_power_noise = mean((theory_resized - noisy_resized).^2);
+
+SNR_recon = 10 * log10(signal_power / noise_power_recon);
+SNR_noise = 10 * log10(signal_power / noise_power_noise);
+
+%% Display Results
+fprintf('Error Metrics:\n');
+fprintf(' - Mean Absolute Error (MAE):\n   Noise vs. Theory: %.6f\n   Reconstructed vs. Theory: %.6f\n', MAE_noise, MAE_recon);
+fprintf(' - Root Mean Square Error (RMSE):\n   Noise vs. Theory: %.6f\n   Reconstructed vs. Theory: %.6f\n', RMSE_noise, RMSE_recon);
+fprintf(' - Signal-to-Noise Ratio (SNR) (dB):\n   Noise: %.2f dB\n   Reconstructed: %.2f dB\n', SNR_noise, SNR_recon);
+
+% CWT vs Hilbert
+
+fb = cwtfilterbank('Wavelet', 'amor', 'SamplingFrequency', fs, 'SignalLength', length(denoised_signal));
+[cfs, freq] = cwt(denoised_signal, 'FilterBank', fb);
+
+% Extract phase information from the CWT coefficients
+cfs_phase = angle(cfs);
+
+% For each time step, select the phase corresponding to the maximum magnitude coefficient
+[~, max_idx] = max(abs(cfs), [], 1);
+inst_phase_cwt = zeros(1, length(denoised_signal));
+for k = 1:length(denoised_signal)
+    inst_phase_cwt(k) = cfs_phase(max_idx(k), k);
+end
+inst_phase_cwt = unwrap(inst_phase_cwt)';  % Convert to column vector
+
+%% Comparison: Plotting the Two Phase Estimates
+figure;
+plot(time, inst_phase_hilbert, 'b-', 'DisplayName', 'Hilbert Phase');
+hold on;
+plot(time, inst_phase_cwt, 'r--', 'DisplayName', 'CWT Phase');
+title('Comparison of Instantaneous Phase: Hilbert vs. CWT');
+xlabel('Time (s)');
+ylabel('Phase (radians)');
+legend;
+grid on;
+
+%% Plot the Phase Difference
+phase_difference = inst_phase_hilbert - inst_phase_cwt;
+figure;
+plot(time, phase_difference, 'k-', 'LineWidth', 1.5);
+title('Phase Difference (Hilbert - CWT)');
+xlabel('Time (s)');
+ylabel('Phase Difference (radians)');
 grid on;
 
 
