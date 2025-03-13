@@ -367,6 +367,10 @@ $$
 1\ \text{m/s} = 100\ \text{cm/s}
 $$
 
+Here we can see the reconstruction of the phase and magnitude
+![signal_reconstruction](https://github.com/user-attachments/assets/505c0d25-9831-4dad-ba1f-83671ee7807d)
+
+
 ---
 
 ### Design Decisions and Alternatives
